@@ -1,0 +1,104 @@
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'ble.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Potentiometer Reader',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const MyHomePage(title: 'Potentiometer Reader'),
+    );
+  }
+}
+
+class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key, required this.title});
+
+  final String title;
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  final BleService _ble = BleService();
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissionsAndConnect();
+  }
+
+  Future<void> _requestPermissionsAndConnect() async {
+    final status = await Future.wait<PermissionStatus>([
+      Permission.bluetoothConnect.request(),
+      Permission.bluetoothScan.request(),
+      Permission.location.request(),
+    ]);
+    final allGranted = status.every((s) => s.isGranted);
+    if (!allGranted) {
+      _ble.status.value = 'Permissions denied';
+      return;
+    }
+
+    await _ble.connect();
+  }
+
+  @override
+  void dispose() {
+    _ble.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(widget.title),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            ValueListenableBuilder<int>(
+              valueListenable: _ble.value,
+              builder: (context, val, _) => Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    children: [
+                      Text('Potentiometer Value:', style: Theme.of(context).textTheme.bodyLarge),
+                      const SizedBox(height: 12),
+                      Text('$val mV', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      LinearProgressIndicator(value: val / 4095),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<String>(
+              valueListenable: _ble.status,
+              builder: (context, s, _) => Text('Status: $s'),
+            ),
+            const SizedBox(height: 8),
+            const Spacer(),
+          ],
+        ),
+      ),
+    );
+  }
+}
