@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 /// Minimal BLE helper that connects to a fixed MAC address and exposes
 /// the latest potentiometer value via [value] and connection state via
 /// [status]. It auto-reconnects when the connection drops.
+
 class BleService {
   final String macAddress;
 
