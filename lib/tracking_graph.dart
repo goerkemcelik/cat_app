@@ -1,52 +1,103 @@
 import 'package:flutter/material.dart';
 
-class TrackingGraphScreen extends StatelessWidget {
+const Color wisteriaColor = Color(0xFFC9A0DC);
+
+class TrackingGraphScreen extends StatefulWidget {
   final List<Map<String, dynamic>> history;
 
   const TrackingGraphScreen({super.key, required this.history});
 
   @override
+  State<TrackingGraphScreen> createState() => _TrackingGraphScreenState();
+}
+
+class _TrackingGraphScreenState extends State<TrackingGraphScreen> {
+  late DateTime _todayStart;
+  
+  @override
+  void initState() {
+    super.initState();
+    _todayStart = DateTime.now();
+    _todayStart = DateTime(_todayStart.year, _todayStart.month, _todayStart.day);
+  }
+
+  List<Map<String, dynamic>> _get5MinuteFilteredHistory() {
+    if (widget.history.isEmpty) return [];
+    final Map<String, Map<String, dynamic>> filtered = {};
+    for (final entry in widget.history) {
+      final t = entry['t'] as DateTime;
+      final minutes = t.hour * 60 + t.minute;
+      final bucket = (minutes ~/ 5) * 5;
+      final key = '$bucket';
+      if (!filtered.containsKey(key) || t.isAfter(filtered[key]!['t'] as DateTime)) {
+        filtered[key] = entry;
+      }
+    }
+    return filtered.values.toList()..sort((a, b) => (a['t'] as DateTime).compareTo(b['t'] as DateTime));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tracking')),
+      appBar: AppBar(
+        title: const Text('Tracking'),
+        elevation: 0,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: SizedBox(
-                  height: 260,
-                  child: history.isEmpty
-                      ? const Center(child: Text('No data yet'))
-                      : CustomPaint(
-                          painter: _LineChartPainter(history),
-                          child: Container(),
-                        ),
-                ),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.all(12.0),
+              child: SizedBox(
+                height: 260,
+                child: widget.history.isEmpty
+                    ? const Center(child: Text('Noch keine Daten'))
+                    : CustomPaint(
+                        painter: _LineChartPainter(widget.history, _todayStart),
+                        child: Container(),
+                      ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Expanded(
-              child: history.isEmpty
-                  ? const Center(child: Text('No readings yet'))
-                  : ListView.builder(
-                      itemCount: history.length,
-                      itemBuilder: (context, index) {
-                        final idx = history.length - 1 - index;
-                        final item = history[idx];
-                        final t = item['t'] as DateTime;
-                        final v = item['v'] as int;
-                        return ListTile(
-                          dense: true,
-                          title: Text('$v mV'),
-                          subtitle: Text('${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}'),
-                        );
-                      },
-                    ),
+              child: widget.history.isEmpty
+                  ? const Center(child: Text('Noch keine Messwerte'))
+                  : _buildDataTable(),
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataTable() {
+    final filtered = _get5MinuteFilteredHistory();
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: SingleChildScrollView(
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Zeit')),
+            DataColumn(label: Text('Füllstand')),
+          ],
+          rows: filtered.reversed.map((entry) {
+            final t = entry['t'] as DateTime;
+            final v = entry['v'] as int;
+            final percentage = ((v / 2528) * 100).toStringAsFixed(1);
+            final timeStr = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
+            return DataRow(cells: [
+              DataCell(Text(timeStr)),
+              DataCell(Text('$percentage%')),
+            ]);
+          }).toList(),
         ),
       ),
     );
@@ -55,18 +106,19 @@ class TrackingGraphScreen extends StatelessWidget {
 
 class _LineChartPainter extends CustomPainter {
   final List<Map<String, dynamic>> history;
+  final DateTime todayStart;
 
-  _LineChartPainter(this.history);
+  _LineChartPainter(this.history, this.todayStart);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
-      ..color = Colors.blueAccent;
+      ..color = wisteriaColor;
 
-    final bg = Paint()..color = Colors.grey.shade200;
-    final padding = 24.0;
+    final bg = Paint()..color = Colors.grey.shade100;
+    final padding = 40.0;
     final w = size.width - padding * 2;
     final h = size.height - padding * 2;
 
@@ -76,43 +128,88 @@ class _LineChartPainter extends CustomPainter {
 
     if (history.isEmpty) return;
 
-    // extract values
-    final values = history.map<int>((e) => e['v'] as int).toList();
-    final minV = values.reduce((a, b) => a < b ? a : b).toDouble();
-    final maxV = values.reduce((a, b) => a > b ? a : b).toDouble();
-    final range = (maxV - minV) == 0 ? 1.0 : (maxV - minV);
-
-    final path = Path();
-    for (var i = 0; i < values.length; i++) {
-      final x = padding + (i / (values.length - 1)) * w;
-      final y = padding + (1 - (values[i] - minV) / range) * h;
-      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+    // convert to percentages
+    final values = <double>[];
+    final times = <DateTime>[];
+    
+    for (final entry in history) {
+      final t = entry['t'] as DateTime;
+      final v = entry['v'] as int;
+      final percentage = (v / 2528) * 100;
+      values.add(percentage);
+      times.add(t);
     }
 
-    // grid lines
+    // fixed y-axis: 0-100%
+    const minY = 0.0;
+    const maxY = 100.0;
+
+    // fixed x-axis: 00:00 - 23:59
+    final secPerDay = 86400.0;
+
+    // grid lines (vertical: every 4 hours, horizontal: every 25%)
     final gridPaint = Paint()
       ..color = Colors.black12
       ..strokeWidth = 1;
-    for (int i = 0; i <= 4; i++) {
-      final gy = padding + (i / 4) * h;
+
+    // horizontal grid lines (0%, 25%, 50%, 75%, 100%)
+    for (int pct = 0; pct <= 100; pct += 25) {
+      final yNorm = (pct - minY) / (maxY - minY);
+      final gy = padding + (1 - yNorm) * h;
       canvas.drawLine(Offset(padding, gy), Offset(padding + w, gy), gridPaint);
     }
 
-    // draw path
+    // vertical grid lines (every 4 hours)
+    for (int hour = 0; hour <= 24; hour += 4) {
+      final xNorm = hour / 24.0;
+      final gx = padding + xNorm * w;
+      canvas.drawLine(Offset(gx, padding), Offset(gx, padding + h), gridPaint);
+    }
+
+    // plot points
+    final path = Path();
+    bool firstPoint = true;
+    for (int i = 0; i < values.length; i++) {
+      final t = times[i];
+      final secSinceToday = t.difference(todayStart).inSeconds;
+      final xNorm = (secSinceToday % secPerDay) / secPerDay;
+      final yNorm = (values[i] - minY) / (maxY - minY);
+      
+      final x = padding + xNorm * w;
+      final y = padding + (1 - yNorm) * h;
+
+      if (firstPoint) {
+        path.moveTo(x, y);
+        firstPoint = false;
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
     canvas.drawPath(path, paint);
 
-    // draw min/max labels
-    final tpMax = TextPainter(
-      text: TextSpan(text: maxV.toStringAsFixed(0), style: const TextStyle(color: Colors.black54, fontSize: 12)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tpMax.paint(canvas, Offset(2, padding - tpMax.height / 2));
+    // Y-axis labels (0%, 25%, 50%, 75%, 100%)
+    for (int pct = 0; pct <= 100; pct += 25) {
+      final yNorm = (pct - minY) / (maxY - minY);
+      final gy = padding + (1 - yNorm) * h;
+      final tp = TextPainter(
+        text: TextSpan(text: '$pct%', style: const TextStyle(color: Colors.black54, fontSize: 11)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(2, gy - tp.height / 2));
+    }
 
-    final tpMin = TextPainter(
-      text: TextSpan(text: minV.toStringAsFixed(0), style: const TextStyle(color: Colors.black54, fontSize: 12)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tpMin.paint(canvas, Offset(2, padding + h - tpMin.height / 2));
+    // X-axis labels (00:00, 04:00, 08:00, ...)
+    for (int hour = 0; hour <= 24; hour += 4) {
+      final xNorm = hour / 24.0;
+      final gx = padding + xNorm * w;
+      final hourStr = '${hour.toString().padLeft(2, '0')}:00';
+      final tp = TextPainter(
+        text: TextSpan(text: hourStr, style: const TextStyle(color: Colors.black54, fontSize: 11)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(gx - tp.width / 2, padding + h + 4));
+    }
   }
 
   @override

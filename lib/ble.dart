@@ -74,7 +74,8 @@ class BleService {
 
             if (chr.properties.notify || chr.properties.indicate) {
               await chr.setNotifyValue(true);
-              _notifySub = chr.value.listen((bytes) {
+              // use lastValueStream (newer API) instead of deprecated `value`
+              _notifySub = chr.lastValueStream.listen((bytes) {
                 final parsed = _parseValue(bytes);
                 if (parsed != null) value.value = parsed;
               });
