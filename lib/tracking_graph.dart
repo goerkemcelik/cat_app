@@ -91,7 +91,7 @@ class _TrackingGraphScreenState extends State<TrackingGraphScreen> {
           rows: filtered.reversed.map((entry) {
             final t = entry['t'] as DateTime;
             final v = entry['v'] as int;
-            final percentage = ((v / 2528) * 100).toStringAsFixed(1);
+            final percentage = (((1641 - v) / 15) * 100).clamp(0, 100).toStringAsFixed(1);
             final timeStr = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
             return DataRow(cells: [
               DataCell(Text(timeStr)),

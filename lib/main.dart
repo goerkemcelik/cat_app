@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'ble.dart';
 import 'tracking_graph.dart';
 import 'settings.dart';
@@ -87,6 +89,7 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   void initState() {
     super.initState();
+    _loadHistory();
     _requestPermissionsAndConnect();
     _valueListener = () {
       final val = _ble.value.value;
@@ -95,6 +98,7 @@ class _MyHomePageState extends State<MyHomePage>
         if (_history.length > 2000) {
           _history.removeRange(0, _history.length - 2000);
         }
+        _saveHistory();
       });
     };
     _ble.value.addListener(_valueListener);
@@ -103,6 +107,36 @@ class _MyHomePageState extends State<MyHomePage>
       if (!mounted) return;
       setState(() {});
     });
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString('measurement_history');
+    if (jsonString != null) {
+      try {
+        final List<dynamic> jsonList = jsonDecode(jsonString);
+        _history.clear();
+        for (final item in jsonList) {
+          _history.add({
+            't': DateTime.parse(item['t'] as String),
+            'v': item['v'] as int,
+          });
+        }
+      } catch (e) {
+        print('Error loading history: $e');
+      }
+    }
+  }
+
+  Future<void> _saveHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = _history.map((entry) {
+      return {
+        't': (entry['t'] as DateTime).toIso8601String(),
+        'v': entry['v'] as int,
+      };
+    }).toList();
+    await prefs.setString('measurement_history', jsonEncode(jsonList));
   }
 
   Future<void> _requestPermissionsAndConnect() async {
@@ -201,7 +235,8 @@ class _MyHomePageState extends State<MyHomePage>
                     ValueListenableBuilder<int>(
                       valueListenable: _ble.value,
                       builder: (context, val, _) {
-                        final percentage = ((val / 2528) * 100).toStringAsFixed(1);
+                        final percentage = (((1641 - val) / 15) * 100).clamp(0, 100).toStringAsFixed(1);
+                        final progressValue = (((1641 - val) / 15) * 100).clamp(0, 100) / 100;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -216,7 +251,7 @@ class _MyHomePageState extends State<MyHomePage>
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: LinearProgressIndicator(
-                                value: val / 2528,
+                                value: progressValue,
                                 minHeight: 10,
                                 backgroundColor: wisteriaColor.withAlpha(60),
                                 valueColor: const AlwaysStoppedAnimation<Color>(

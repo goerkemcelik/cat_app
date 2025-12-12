@@ -25,14 +25,9 @@ class BleService {
   String _norm(String s) => s.replaceAll(RegExp(r'[^0-9A-Fa-f]'), '').toUpperCase();
 
   int? _parseValue(List<int> bytes) {
-    try {
-      final s = utf8.decode(bytes, allowMalformed: true).trim();
-      final m = RegExp(r"(\d{1,6})").firstMatch(s);
-      if (m != null) return int.parse(m.group(1)!);
-    } catch (_) {}
     if (bytes.isEmpty) return null;
-    if (bytes.length >= 2) return bytes[0] | (bytes[1] << 8);
-    return bytes[0];
+    if (bytes.length >= 2) return (bytes[0] << 8) | bytes[1];
+    return bytes[0]; // fallback for single byte
   }
 
   Future<void> connect() async {
