@@ -13,22 +13,6 @@ class TrackingGraphScreen extends StatefulWidget {
 
 class _TrackingGraphScreenState extends State<TrackingGraphScreen> {
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  List<Map<String, dynamic>> _get30SecondFilteredHistory() {
-    if (widget.history.isEmpty) return [];
-    // Since we're already taking snapshots every 30 seconds, just return all history
-    return widget.history;
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -68,7 +52,7 @@ class _TrackingGraphScreenState extends State<TrackingGraphScreen> {
   }
 
   Widget _buildDataTable() {
-    final filtered = _get30SecondFilteredHistory();
+    final filtered = widget.history;
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -86,10 +70,10 @@ class _TrackingGraphScreenState extends State<TrackingGraphScreen> {
             rows: filtered.reversed.map((entry) {
               final t = entry['t'] as DateTime;
               final v = entry['v'] as int;
-              // New mapping: 0-2500 range
+              // Potentiometer value to percentage mapping
               final percentage = ((v / 2500) * 100).clamp(0, 100).toStringAsFixed(1);
-              // Old mapping: 1641-1491 range (inverted)
-              // final percentage = (((1641 - v) / 150) * 100).clamp(0, 100).toStringAsFixed(1);
+              // Wägezelle mapping: 1641-1626 range (inverted)
+              // final percentage = (((1641 - v) / 15) * 100).clamp(0, 100).toStringAsFixed(1);
               final timeStr = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
               return DataRow(cells: [
                 DataCell(Text(timeStr)),
@@ -122,7 +106,6 @@ class _LineChartPainter extends CustomPainter {
     final w = size.width - padding * 2;
     final h = size.height - padding * 2;
 
-    // background with rounded corners
     final rect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, size.width, size.height),
       const Radius.circular(16),
@@ -163,22 +146,19 @@ class _LineChartPainter extends CustomPainter {
     for (final entry in filtered30SecHistory) {
       final t = entry['t'] as DateTime;
       final v = entry['v'] as int;
-      // New mapping: 0-2500 range
+      // Potentiometer value to percentage mapping
       final percentage = ((v / 2500) * 100).clamp(0, 100).toDouble();
-      // Old mapping: 1641-1491 range (inverted)
-      // final percentage = (((1641 - v) / 150) * 100).clamp(0, 100).toDouble();
+      // Wägezelle mapping: 1641-1626 range (inverted)
+      // final percentage = (((1641 - v) / 15) * 100).clamp(0, 100).toDouble();
       values.add(percentage);
       times.add(t);
     }
 
-    // fixed y-axis: 0-100%
     const minY = 0.0;
     const maxY = 100.0;
 
-    // x-axis: last 10 minutes (600 seconds)
     const timeRangeSeconds = 600.0;
 
-    // grid lines (vertical: every 2 minutes, horizontal: every 25%)
     final gridPaint = Paint()
       ..color = Colors.black12
       ..strokeWidth = 1;
@@ -190,7 +170,7 @@ class _LineChartPainter extends CustomPainter {
       canvas.drawLine(Offset(padding, gy), Offset(padding + w, gy), gridPaint);
     }
 
-    // vertical grid lines (every 2 minutes: -10, -8, -6, -4, -2, 0)
+    // vertical grid lines (-10, -8, -6, -4, -2, 0)
     for (int minAgo = -10; minAgo <= 0; minAgo += 2) {
       final secAgo = minAgo * 60.0;
       final xNorm = (secAgo + 600) / timeRangeSeconds;

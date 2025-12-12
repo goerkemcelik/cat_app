@@ -30,6 +30,7 @@ class _MyAppState extends State<MyApp> {
     _loadDarkModePreference();
   }
 
+  // Load dark mode setting from storage
   Future<void> _loadDarkModePreference() async {
     final prefs = await SharedPreferences.getInstance();
     final isDark = prefs.getBool('isDarkMode') ?? false;
@@ -38,6 +39,7 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  // Save dark mode setting to storage
   Future<void> _saveDarkModePreference(bool isDark) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', isDark);
@@ -100,11 +102,11 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage>
     with TickerProviderStateMixin {
-  final BleService _ble = BleService();
-  int _selectedIndex = 0;
-  final List<Map<String, dynamic>> _history = [];
-  Timer? _countdownTimer;
-  Timer? _snapshotTimer;
+  final BleService _ble = BleService(); // BLE connection service
+  int _selectedIndex = 0; // Bottom nav bar index
+  final List<Map<String, dynamic>> _history = []; // Measurement snapshots
+  Timer? _countdownTimer; // Updates feed time countdown
+  Timer? _snapshotTimer; // Takes measurements every 30s
   TimeOfDay _feedTime1 = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _feedTime2 = const TimeOfDay(hour: 20, minute: 0);
 
@@ -115,12 +117,13 @@ class _MyHomePageState extends State<MyHomePage>
     _loadFeedTimes();
     _requestPermissionsAndConnect();
     
-    // Take a snapshot every 30 seconds
+    // Snapshot timer: saves BLE value to history every 30 seconds
     _snapshotTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       final val = _ble.value.value;
       setState(() {
         _history.add({'t': DateTime.now(), 'v': val});
+        // Keep only last 2000 measurements
         if (_history.length > 2000) {
           _history.removeRange(0, _history.length - 2000);
         }
@@ -128,13 +131,14 @@ class _MyHomePageState extends State<MyHomePage>
       });
     });
     
-    // update countdown every minute
+    // Countdown timer: refreshes UI every minute for feed time display
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!mounted) return;
       setState(() {});
     });
   }
 
+  // Load measurement history from storage
   Future<void> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('measurement_history');
@@ -149,11 +153,13 @@ class _MyHomePageState extends State<MyHomePage>
           });
         }
       } catch (e) {
-        print('Error loading history: $e');
+        // ignore
+        // print('Error loading history: $e');
       }
     }
   }
 
+  // Load saved feed times from storage
   Future<void> _loadFeedTimes() async {
     final prefs = await SharedPreferences.getInstance();
     final time1Hour = prefs.getInt('feedTime1_hour');
@@ -173,6 +179,7 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  // Save feed times to storage
   Future<void> _saveFeedTimes() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('feedTime1_hour', _feedTime1.hour);
@@ -181,6 +188,7 @@ class _MyHomePageState extends State<MyHomePage>
     await prefs.setInt('feedTime2_minute', _feedTime2.minute);
   }
 
+  // Save measurement history to storage
   Future<void> _saveHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = _history.map((entry) {
@@ -192,6 +200,7 @@ class _MyHomePageState extends State<MyHomePage>
     await prefs.setString('measurement_history', jsonEncode(jsonList));
   }
 
+  // Clear all measurement history
   Future<void> _clearHistory() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('measurement_history');
@@ -200,6 +209,7 @@ class _MyHomePageState extends State<MyHomePage>
     });
   }
 
+  // Request BLE permissions and connect to device
   Future<void> _requestPermissionsAndConnect() async {
     final status = await Future.wait<PermissionStatus>([
       Permission.bluetoothConnect.request(),
@@ -463,6 +473,7 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  // Calculate time until next feeding
   String _nextFeedCountdown() {
     final now = DateTime.now();
     DateTime nextFor(TimeOfDay tod) {
