@@ -1,12 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
-/// Minimal BLE helper that connects to a fixed MAC address and exposes
-/// the latest potentiometer value via [value] and connection state via
-/// [status]. It auto-reconnects when the connection drops.
 
 class BleService {
   final String macAddress;
@@ -62,14 +57,12 @@ class BleService {
 
             if (chr == null) {
               status.value = 'Connected (no char)';
-              // schedule reconnect
               _scheduleReconnect();
               return;
             }
 
             if (chr.properties.notify || chr.properties.indicate) {
               await chr.setNotifyValue(true);
-              // use lastValueStream (newer API) instead of deprecated `value`
               _notifySub = chr.lastValueStream.listen((bytes) {
                 final parsed = _parseValue(bytes);
                 if (parsed != null) value.value = parsed;
@@ -83,14 +76,6 @@ class BleService {
                 } catch (_) {}
               });
             }
-
-            // listen for disconnect and auto-reconnect
-            // flutter_blue_plus does not provide a simple onDisconnect callback
-            // here, we rely on the platform connection state changes indirectly ->
-            // if the device disconnects unexpectedly, other operations will fail
-            // and we can attempt reconnect on error paths. For simplicity, schedule
-            // a reconnect when the device's connection is not active (checked by caller or external events).
-
             break;
           }
         }

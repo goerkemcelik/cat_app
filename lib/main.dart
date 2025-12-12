@@ -25,6 +25,25 @@ class _MyAppState extends State<MyApp> {
   bool _isDarkMode = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadDarkModePreference();
+  }
+
+  Future<void> _loadDarkModePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDark = prefs.getBool('isDarkMode') ?? false;
+    setState(() {
+      _isDarkMode = isDark;
+    });
+  }
+
+  Future<void> _saveDarkModePreference(bool isDark) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', isDark);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'C.A.T.',
@@ -34,9 +53,9 @@ class _MyAppState extends State<MyApp> {
         scaffoldBackgroundColor: const Color(0xFFFCF8FF),
         textTheme: GoogleFonts.montserratTextTheme().copyWith(
           headlineLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
-          bodyLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
-          bodyMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
-          bodySmall: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
+          bodyLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
+          bodyMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
+          bodySmall: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
           titleMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
         ),
       ),
@@ -46,16 +65,19 @@ class _MyAppState extends State<MyApp> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         textTheme: GoogleFonts.montserratTextTheme().copyWith(
           headlineLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
-          bodyLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
-          bodyMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
-          bodySmall: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
+          bodyLarge: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
+          bodyMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
+          bodySmall: GoogleFonts.montserrat(fontWeight: FontWeight.w400),
           titleMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
         ),
       ),
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: MyHomePage(
         title: 'C.A.T.',
-        onDarkModeChanged: (isDark) => setState(() => _isDarkMode = isDark),
+        onDarkModeChanged: (isDark) {
+          setState(() => _isDarkMode = isDark);
+          _saveDarkModePreference(isDark);
+        },
       ),
       debugShowCheckedModeBanner: false,
     );
@@ -81,8 +103,8 @@ class _MyHomePageState extends State<MyHomePage>
   final BleService _ble = BleService();
   int _selectedIndex = 0;
   final List<Map<String, dynamic>> _history = [];
-  late VoidCallback _valueListener;
   Timer? _countdownTimer;
+  Timer? _snapshotTimer;
   TimeOfDay _feedTime1 = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _feedTime2 = const TimeOfDay(hour: 20, minute: 0);
 
@@ -90,8 +112,12 @@ class _MyHomePageState extends State<MyHomePage>
   void initState() {
     super.initState();
     _loadHistory();
+    _loadFeedTimes();
     _requestPermissionsAndConnect();
-    _valueListener = () {
+    
+    // Take a snapshot every 30 seconds
+    _snapshotTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
       final val = _ble.value.value;
       setState(() {
         _history.add({'t': DateTime.now(), 'v': val});
@@ -100,8 +126,8 @@ class _MyHomePageState extends State<MyHomePage>
         }
         _saveHistory();
       });
-    };
-    _ble.value.addListener(_valueListener);
+    });
+    
     // update countdown every minute
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!mounted) return;
@@ -128,6 +154,33 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  Future<void> _loadFeedTimes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final time1Hour = prefs.getInt('feedTime1_hour');
+    final time1Minute = prefs.getInt('feedTime1_minute');
+    final time2Hour = prefs.getInt('feedTime2_hour');
+    final time2Minute = prefs.getInt('feedTime2_minute');
+    
+    if (time1Hour != null && time1Minute != null) {
+      setState(() {
+        _feedTime1 = TimeOfDay(hour: time1Hour, minute: time1Minute);
+      });
+    }
+    if (time2Hour != null && time2Minute != null) {
+      setState(() {
+        _feedTime2 = TimeOfDay(hour: time2Hour, minute: time2Minute);
+      });
+    }
+  }
+
+  Future<void> _saveFeedTimes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('feedTime1_hour', _feedTime1.hour);
+    await prefs.setInt('feedTime1_minute', _feedTime1.minute);
+    await prefs.setInt('feedTime2_hour', _feedTime2.hour);
+    await prefs.setInt('feedTime2_minute', _feedTime2.minute);
+  }
+
   Future<void> _saveHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = _history.map((entry) {
@@ -137,6 +190,14 @@ class _MyHomePageState extends State<MyHomePage>
       };
     }).toList();
     await prefs.setString('measurement_history', jsonEncode(jsonList));
+  }
+
+  Future<void> _clearHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('measurement_history');
+    setState(() {
+      _history.clear();
+    });
   }
 
   Future<void> _requestPermissionsAndConnect() async {
@@ -156,9 +217,9 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void dispose() {
-    _ble.value.removeListener(_valueListener);
     _ble.dispose();
     _countdownTimer?.cancel();
+    _snapshotTimer?.cancel();
     super.dispose();
   }
 
@@ -171,7 +232,10 @@ class _MyHomePageState extends State<MyHomePage>
     final screens = [
       _buildHome(context),
       TrackingGraphScreen(history: _history),
-      SettingsScreen(onDarkModeChanged: widget.onDarkModeChanged),
+      SettingsScreen(
+        onDarkModeChanged: widget.onDarkModeChanged,
+        onClearHistory: _clearHistory,
+      ),
     ];
 
     return Scaffold(
@@ -235,8 +299,12 @@ class _MyHomePageState extends State<MyHomePage>
                     ValueListenableBuilder<int>(
                       valueListenable: _ble.value,
                       builder: (context, val, _) {
-                        final percentage = (((1641 - val) / 15) * 100).clamp(0, 100).toStringAsFixed(1);
-                        final progressValue = (((1641 - val) / 15) * 100).clamp(0, 100) / 100;
+                        // New mapping: 0-2500 range
+                        final percentage = ((val / 2500) * 100).clamp(0, 100).toStringAsFixed(1);
+                        final progressValue = ((val / 2500) * 100).clamp(0, 100) / 100;
+                        // Old mapping: 1641-1491 range (inverted)
+                        // final percentage = (((1641 - val) / 150) * 100).clamp(0, 100).toStringAsFixed(1);
+                        // final progressValue = (((1641 - val) / 150) * 100).clamp(0, 100) / 100;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -292,12 +360,18 @@ class _MyHomePageState extends State<MyHomePage>
                         _buildTimePicker(
                           context,
                           _feedTime1,
-                          (time) => setState(() => _feedTime1 = time),
+                          (time) {
+                            setState(() => _feedTime1 = time);
+                            _saveFeedTimes();
+                          },
                         ),
                         _buildTimePicker(
                           context,
                           _feedTime2,
-                          (time) => setState(() => _feedTime2 = time),
+                          (time) {
+                            setState(() => _feedTime2 = time);
+                            _saveFeedTimes();
+                          },
                         ),
                       ],
                     ),
