@@ -8,12 +8,16 @@ import 'ble.dart';
 import 'tracking_graph.dart';
 import 'settings.dart';
 
+/// Hauptfarbe der App (Wisteria/Lila)
 const Color wisteriaColor = Color(0xFFC9A0DC);
 
+/// Einstiegspunkt der App
 void main() {
   runApp(const MyApp());
 }
 
+/// Haupt-Widget der App
+/// Verwaltet das globale Theme (hell/dunkel) und initialisiert die MaterialApp
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -22,6 +26,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  /// Speichert, ob der Dark Mode aktiv ist
   bool _isDarkMode = false;
 
   @override
@@ -45,10 +50,13 @@ class _MyAppState extends State<MyApp> {
     await prefs.setBool('isDarkMode', isDark);
   }
 
+  /// Baut das Haupt-Widget mit Theme-Konfiguration
+  /// Definiert sowohl helles als auch dunkles Theme mit Montserrat-Schriftart
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'C.A.T.',
+      // Helles Theme mit wisteriaColor als Seed-Farbe
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: wisteriaColor, brightness: Brightness.light),
         useMaterial3: true,
@@ -61,6 +69,7 @@ class _MyAppState extends State<MyApp> {
           titleMedium: GoogleFonts.montserrat(fontWeight: FontWeight.w200),
         ),
       ),
+      // Dunkles Theme mit gleicher Farbpalette
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: wisteriaColor, brightness: Brightness.dark),
         useMaterial3: true,
@@ -86,6 +95,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
+/// Hauptseite der App mit Navigation zwischen Home, Tracking und Settings
 class MyHomePage extends StatefulWidget {
   const MyHomePage({
     super.key,
@@ -102,28 +112,42 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage>
     with TickerProviderStateMixin {
-  final BleService _ble = BleService(); // BLE connection service
-  int _selectedIndex = 0; // Bottom nav bar index
-  final List<Map<String, dynamic>> _history = []; // Measurement snapshots
-  Timer? _countdownTimer; // Updates feed time countdown
-  Timer? _snapshotTimer; // Takes measurements every 30s
+  /// BLE-Service für die Verbindung zur Wägezelle
+  final BleService _ble = BleService();
+  
+  /// Aktuell ausgewählter Tab in der Bottom Navigation Bar (0=Home, 1=Track, 2=Settings)
+  int _selectedIndex = 0;
+  
+  /// Liste mit Messwertverlauf (Maps mit Zeitstempel 't' und Wert 'v')
+  final List<Map<String, dynamic>> _history = [];
+  
+  /// Timer für regelmäßige UI-Aktualisierung der Fütterzeit-Anzeige
+  Timer? _countdownTimer;
+  
+  /// Timer für periodische Snapshots (alle 30s wird aktueller Messwert gespeichert)
+  Timer? _snapshotTimer;
+  
+  /// Erste tägliche Fütterzeit (Standard: 8:00)
   TimeOfDay _feedTime1 = const TimeOfDay(hour: 8, minute: 0);
+  
+  /// Zweite tägliche Fütterzeit (Standard: 20:00)
   TimeOfDay _feedTime2 = const TimeOfDay(hour: 20, minute: 0);
 
   @override
   void initState() {
     super.initState();
+    // Lade gespeicherte Daten beim Start
     _loadHistory();
     _loadFeedTimes();
     _requestPermissionsAndConnect();
     
-    // Snapshot timer: saves BLE value to history every 30 seconds
+    // Snapshot-Timer: Speichert alle 30 Sekunden den aktuellen BLE-Wert
     _snapshotTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       final val = _ble.value.value;
       setState(() {
         _history.add({'t': DateTime.now(), 'v': val});
-        // Keep only last 2000 measurements
+        // Behalte nur die letzten 2000 Messungen (ca. 16 Stunden bei 30s Intervallen)
         if (_history.length > 2000) {
           _history.removeRange(0, _history.length - 2000);
         }
@@ -131,14 +155,15 @@ class _MyHomePageState extends State<MyHomePage>
       });
     });
     
-    // Countdown timer: refreshes UI every minute for feed time display
+    // Countdown-Timer: Aktualisiert die Fütterzeit-Anzeige jede Minute
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!mounted) return;
       setState(() {});
     });
   }
 
-  // Load measurement history from storage
+  /// Lädt den Messwertverlauf aus dem lokalen Speicher
+  /// Konvertiert JSON-String zurück in Liste von Maps mit DateTime und int
   Future<void> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('measurement_history');
@@ -153,8 +178,7 @@ class _MyHomePageState extends State<MyHomePage>
           });
         }
       } catch (e) {
-        // ignore
-        // print('Error loading history: $e');
+        // Fehler werden ignoriert, App startet mit leerem Verlauf
       }
     }
   }
@@ -225,6 +249,7 @@ class _MyHomePageState extends State<MyHomePage>
     await _ble.connect();
   }
 
+  /// Räumt Ressourcen auf, wenn das Widget entfernt wird
   @override
   void dispose() {
     _ble.dispose();
@@ -233,10 +258,12 @@ class _MyHomePageState extends State<MyHomePage>
     super.dispose();
   }
 
+  /// Ändert den aktuell ausgewählten Tab in der Navigation
   void _selectNavItem(int index) {
     setState(() => _selectedIndex = index);
   }
 
+  /// Baut die Haupt-UI mit IndexedStack für Navigation zwischen drei Screens
   @override
   Widget build(BuildContext context) {
     final screens = [
@@ -249,10 +276,12 @@ class _MyHomePageState extends State<MyHomePage>
     ];
 
     return Scaffold(
+      // IndexedStack behält den State aller Screens bei Tab-Wechsel bei
       body: IndexedStack(
         index: _selectedIndex,
         children: screens,
       ),
+      // Bottom Navigation Bar mit drei Tabs
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _selectNavItem,
@@ -265,6 +294,7 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  /// Baut den Home-Screen mit Füllstand, Fütterzeiten und Verbindungsstatus
   Widget _buildHome(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
@@ -272,8 +302,7 @@ class _MyHomePageState extends State<MyHomePage>
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
           child: Column(
             children: [
-              // Title
-              // Title with custom font
+              // App-Titel mit Montserrat-Schriftart
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
@@ -287,7 +316,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               const SizedBox(height: 32),
 
-              // Füllstand Surface (color-based elevation)
+              // Füllstand-Anzeige: Zeigt aktuellen Füllstand als Prozent und Fortschrittsbalken
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -306,13 +335,14 @@ class _MyHomePageState extends State<MyHomePage>
                           ),
                     ),
                     const SizedBox(height: 16),
+                    // Reagiert automatisch auf Änderungen des BLE-Werts
                     ValueListenableBuilder<int>(
                       valueListenable: _ble.value,
                       builder: (context, val, _) {
-                        // New mapping: 0-2500 range
+                        // Mapping: Potentiometer-Rohwert (0-2500) -> Prozent (0-100%)
                         final percentage = ((val / 2500) * 100).clamp(0, 100).toStringAsFixed(1);
                         final progressValue = ((val / 2500) * 100).clamp(0, 100) / 100;
-                        // Old mapping: 1641-1491 range (inverted)
+                        // Altes Mapping für Wägezelle (auskommentiert):
                         // final percentage = (((1641 - val) / 150) * 100).clamp(0, 100).toStringAsFixed(1);
                         // final progressValue = (((1641 - val) / 150) * 100).clamp(0, 100) / 100;
                         return Column(
@@ -346,7 +376,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               const SizedBox(height: 16),
 
-              // Futterzeit Surface
+              // Futterzeit-Einstellungen: Zwei Time-Picker für tägliche Fütterungen
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -364,6 +394,7 @@ class _MyHomePageState extends State<MyHomePage>
                           ),
                     ),
                     const SizedBox(height: 12),
+                    // Zwei anklickbare Time-Picker für die beiden Fütterzeiten
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -386,7 +417,7 @@ class _MyHomePageState extends State<MyHomePage>
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // Countdown to next feed
+                    // Countdown zur nächsten Fütterzeit
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
                       child: Text(
@@ -399,7 +430,7 @@ class _MyHomePageState extends State<MyHomePage>
               ),
               const SizedBox(height: 16),
 
-              // Connection Surface
+              // Verbindungsstatus und Reconnect-Button
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -473,9 +504,11 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
-  // Calculate time until next feeding
+  /// Berechnet die Zeit bis zur nächsten Fütterung
+  /// Wählt die nähere der beiden konfigurierten Fütterzeiten
   String _nextFeedCountdown() {
     final now = DateTime.now();
+    // Hilfsfunktion: Berechnet nächstes Vorkommen einer Tageszeit
     DateTime nextFor(TimeOfDay tod) {
       final candidate = DateTime(now.year, now.month, now.day, tod.hour, tod.minute);
       if (candidate.isAfter(now)) return candidate;
@@ -491,6 +524,8 @@ class _MyHomePageState extends State<MyHomePage>
     return 'Nächste Futterzeit in: ${hours}h${minutes.toString().padLeft(2, '0')}min';
   }
 
+  /// Erstellt ein anklickbares Widget zur Auswahl einer Uhrzeit
+  /// Öffnet bei Tap einen Time-Picker Dialog
   Widget _buildTimePicker(
     BuildContext context,
     TimeOfDay time,

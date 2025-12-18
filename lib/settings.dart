@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 
+/// Hauptfarbe der App (identisch mit main.dart)
 const Color wisteriaColor = Color(0xFFC9A0DC);
 
+/// Settings-Screen Widget
+/// Ermöglicht Umschalten zwischen Dark/Light Mode und Löschen des Messverlaufs
 class SettingsScreen extends StatefulWidget {
+  /// Callback, der aufgerufen wird, wenn der Dark Mode geändert wird
   final ValueChanged<bool> onDarkModeChanged;
+  
+  /// Callback zum Löschen des gesamten Messverlaufs
   final VoidCallback onClearHistory;
 
   const SettingsScreen({
@@ -17,6 +23,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  /// Baut die Settings-UI mit zwei Sektionen: Erscheinungsbild und Daten
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Sektion: Erscheinungsbild
             Text(
               'Erscheinungsbild',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -36,6 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
             ),
             const SizedBox(height: 12),
+            // Dark Mode Toggle
             Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -54,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            // Sektion: Daten
             Text(
               'Daten',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -72,6 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                   onPressed: () async {
+                    // Bestätigungsdialog anzeigen
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -89,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                     );
+                    // Wenn bestätigt, lösche Verlauf und zeige Snackbar
                     if (confirm == true) {
                       widget.onClearHistory();
                       if (!context.mounted) return;
